@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install feedparser requests trafilatura yt-dlp google-generativeai
+          pip install feedparser requests trafilatura yt-dlp google-genai
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
