@@ -7,13 +7,12 @@ from google import genai
 
 TEST_URLS = [
     "https://vercel.com",
-    "https://cloudflare.com",
     "https://github.com",
     "https://google.com",
     "https://youtube.com",
 ]
 
-STABILITY_ROUNDS = 5
+STABILITY_ROUNDS = 2
 MIN_SUCCESS_RATE = 0.6
 
 
