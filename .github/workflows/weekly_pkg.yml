@@ -1,0 +1,107 @@
+name: Weekly Package
+
+on:
+  schedule:
+    - cron: "0 22 * * 0"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install feedparser requests trafilatura yt-dlp google-generativeai
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Init DB
+        run: python scripts/db_init.py
+
+      # =========================
+      # RETRY (best effort)
+      # =========================
+      - name: Retry failed sources
+        run: |
+          python - << 'EOF'
+          import os
+          import sqlite3
+          import subprocess
+
+          conn = sqlite3.connect("current.db")
+          rows = conn.execute("SELECT DISTINCT source_id FROM errors").fetchall()
+
+          sources = [r[0] for r in rows]
+
+          for s in sources:
+              print("retry:", s)
+
+              if "youtube" in s:
+                  cmd = ["python", "scripts/youtube.py"]
+              else:
+                  cmd = ["python", "scripts/rss.py"]
+
+              env = {**os.environ, "RETRY_ONLY_SOURCE": s}
+              subprocess.run(cmd, env=env)
+          EOF
+
+      # =========================
+      # PROXY GENERATION
+      # =========================
+      - name: Generate proxy list
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python scripts/proxy.py
+
+      # =========================
+      # PACKAGE
+      # =========================
+      - name: Create package
+        run: |
+          python scripts/weekly_pkg.py
+
+      # =========================
+      # SEND EMAIL
+      # =========================
+      - name: Send email
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          to: ${{ secrets.TO_EMAIL }}
+          from: GitHub Actions <${{ secrets.SMTP_USER }}>
+          subject: Weekly Package
+          body: Weekly data package attached.
+          attachments: output.zip
+
+      # =========================
+      # RESET DB
+      # =========================
+      - name: Reset DB
+        run: |
+          rm -f current.db
+          python scripts/db_init.py
+
+      # =========================
+      # COMMIT
+      # =========================
+      - name: Commit
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add current.db
+          git commit -m "weekly reset" || true
+          git push
