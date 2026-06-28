@@ -1,19 +1,6 @@
-from pathlib import Path
-import sqlite3
-
-ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "current.db"
-SCHEMA_PATH = ROOT / "schema.sql"
+import hashlib
 
 
-def main():
-    schema = SCHEMA_PATH.read_text("utf-8")
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.executescript(schema)
-    conn.commit()
-    conn.close()
-
-
-if __name__ == "__main__":
-    main()
+def generate_item_id(source_id: str, run_id: str) -> str:
+    payload = f"{source_id}|{run_id}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()

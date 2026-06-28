@@ -1,17 +1,15 @@
 from datetime import datetime, UTC
 from pathlib import Path
 import xml.etree.ElementTree as ET
+import subprocess
+import tempfile
 import os
 
-import requests
 import feedparser
-import trafilatura
+import requests
 
 from db_write import insert_item, insert_error, item_exists
 from hash import generate_item_id
-
-
-OPML_PATH = Path("feed.opml")
 
 
 def run_id():
@@ -23,48 +21,54 @@ def retry_filter():
 
 
 def load_feeds():
-    tree = ET.parse(OPML_PATH)
-    root = tree.getroot()
-
+    tree = ET.parse("feed.opml")
     return [
         o.attrib["xmlUrl"]
-        for o in root.iter("outline")
-        if o.attrib.get("xmlUrl")
+        for o in tree.iter("outline")
+        if "youtube" in o.attrib.get("xmlUrl", "")
     ]
 
 
-def fetch(url):
-    r = requests.get(url, timeout=30)
-    r.raise_for_status()
-    return feedparser.parse(r.content)
+def extract_id(url):
+    if "v=" in url:
+        return url.split("v=")[1].split("&")[0]
+    if "youtu.be/" in url:
+        return url.split("youtu.be/")[1]
+    return None
 
 
-def extract(url):
-    d = trafilatura.fetch_url(url)
-    if not d:
-        return None
+def download(url):
+    with tempfile.TemporaryDirectory() as t:
+        cmd = [
+            "yt-dlp",
+            "--skip-download",
+            "--write-auto-sub",
+            "--sub-langs", "en.*,zh.*",
+            "--output", f"{t}/%(id)s",
+            url,
+        ]
 
-    return trafilatura.extract(
-        d,
-        output_format="markdown"
+        r = subprocess.run(cmd)
+
+        if r.returncode != 0:
+            return None
+
+        files = list(Path(t).glob("*.vtt"))
+        if not files:
+            return None
+
+        return files[0].read_text("utf-8", errors="ignore")
+
+
+def clean(vtt):
+    return "\n".join(
+        l for l in vtt.splitlines()
+        if l and "-->" not in l and "WEBVTT" not in l and not l.isdigit()
     )
-
-
-def content(entry):
-    url = entry.get("link")
-
-    if url:
-        md = extract(url)
-        if md:
-            return md
-
-    return entry.get("summary", "")
 
 
 def process(entry, r, feed):
     url = entry.get("link")
-    if not url:
-        return
 
     if retry_filter() and feed != retry_filter():
         return
@@ -72,13 +76,17 @@ def process(entry, r, feed):
     if item_exists(url):
         return
 
-    text = content(entry)
+    vtt = download(url)
+
+    if not vtt:
+        insert_error(r, url, "fetch", "network", "subtitle fail")
+        return
 
     insert_item(
         generate_item_id(url, r),
         url,
         entry.get("title", ""),
-        text,
+        clean(vtt),
         entry.get("published", r),
         r,
     )
@@ -89,7 +97,7 @@ def main():
 
     for f in load_feeds():
         try:
-            feed = fetch(f)
+            feed = feedparser.parse(requests.get(f).content)
 
             for e in feed.entries:
                 try:
