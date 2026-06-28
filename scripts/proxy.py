@@ -2,7 +2,7 @@ import os
 import time
 import requests
 import statistics
-import google.generativeai as genai
+from google import genai
 
 
 TEST_URLS = [
@@ -14,14 +14,11 @@ TEST_URLS = [
 ]
 
 STABILITY_ROUNDS = 5
-MIN_SUCCESS_RATE = 0.6  # 低于这个成功率的代理直接丢弃
+MIN_SUCCESS_RATE = 0.6
 
 
 def fetch_proxies_from_gemini():
-    api_key = os.getenv("GEMINI_API_KEY")
-    genai.configure(api_key=api_key)
-
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    client = genai.Client()
 
     prompt = """
 Return 100 proxy servers in plain text format.
@@ -31,7 +28,10 @@ No explanation.
 No markdown.
 """
 
-    resp = model.generate_content(prompt)
+    resp = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+    )
 
     proxies = [
         line.strip()
@@ -69,7 +69,6 @@ def test_once(proxy, url):
 
 
 def validate_proxy(proxy):
-    """对所有 TEST_URLS 各测一次，不做 fail-fast，返回(成功数, 总数, 成功请求的延迟列表)"""
     successes = 0
     latencies = []
 
@@ -85,7 +84,6 @@ def validate_proxy(proxy):
 
 
 def stability_test(proxy):
-    """跑 STABILITY_ROUNDS 轮，统计真实的成功率，而不是恒为 1.0"""
     total_success = 0
     total_checks = 0
     all_latencies = []
@@ -100,7 +98,7 @@ def stability_test(proxy):
         time.sleep(0.2)
 
     if not all_latencies:
-        return None  # 一次都没成功过，没有意义的延迟数据
+        return None
 
     success_rate = total_success / total_checks
 
@@ -127,7 +125,6 @@ def main():
         if result:
             valid.append(result)
 
-    # 排序：稳定性优先，延迟次之（现在 success_rate 是真实值，排序才有意义）
     valid.sort(
         key=lambda x: (-x["success_rate"], x["avg_latency"])
     )
