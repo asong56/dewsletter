@@ -69,6 +69,20 @@
                 type="rss"
                 xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UCffPrldpcuZNeYbzeZ8udxg"
                 htmlUrl="https://www.youtube.com/channel/UCffPrldpcuZNeYbzeZ8udxg" />
+
+            <outline
+                text="Billboard"
+                title="Billboard"
+                type="rss"
+                xmlUrl="https://www.billboard.com/feed/"
+                htmlUrl="https://www.billboard.com" />
+
+            <outline
+                text="Bandcamp Daily"
+                title="Bandcamp Daily"
+                type="rss"
+                xmlUrl="https://daily.bandcamp.com/feed"
+                htmlUrl="https://daily.bandcamp.com" />
       
         </outline>
 
@@ -150,6 +164,20 @@
                 xmlUrl="https://www.youtube.com/feeds/videos.xml?channel_id=UC3411UsjUC2t-Xfr1gwIhzg"
                 htmlUrl="https://www.youtube.com/channel/UC3411UsjUC2t-Xfr1gwIhzg" />
 
+            <outline
+                text="Wait But Why"
+                title="Wait But Why"
+                type="rss"
+                xmlUrl="https://waitbutwhy.com/feed"
+                htmlUrl="https://waitbutwhy.com" />
+
+            <outline
+                text="The Marginalian"
+                title="The Marginalian"
+                type="rss"
+                xmlUrl="https://www.themarginalian.org/feed/"
+                htmlUrl="https://www.themarginalian.org" />
+
         </outline>
 
 
@@ -176,8 +204,28 @@
                 xmlUrl="https://selfh.st/rss"
                 htmlUrl="https://selfh.st" />
 
+            <outline
+                text="Bubbles Town"
+                title="Bubbles Town"
+                type="rss"
+                xmlUrl="https://bubbles.town/weekly/feed"
+                htmlUrl="https://bubbles.town" />
+
+            <outline
+                text="Innei"
+                title="Innei"
+                type="rss"
+                xmlUrl="https://innei.in/feed"
+                htmlUrl="https://innei.in" />
+
+            <outline
+                text="Today I Found Out"
+                title="Today I Found Out"
+                type="rss"
+                xmlUrl="https://feeds.feedburner.com/TodayIFoundOut"
+                htmlUrl="https://www.todayifoundout.com" />
+
         </outline>
 
     </body>
-
 </opml>
