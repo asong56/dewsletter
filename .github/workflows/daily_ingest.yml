@@ -18,18 +18,56 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install feedparser requests trafilatura yt-dlp
+      - name: Install dependencies
+        run: pip install feedparser requests trafilatura yt-dlp
 
       - run: sudo apt-get install -y ffmpeg
 
       - run: python scripts/db_init.py
-
       - run: python scripts/rss.py
-        env:
-          LOOKBACK_DAYS: "8"
       - run: python scripts/youtube.py
 
-      - run: |
+      # =========================
+      # RENDER DAILY EMAIL
+      # =========================
+      - name: Render daily email
+        run: python scripts/render_daily.py
+
+      - name: Read email body
+        id: email
+        run: |
+          {
+            echo 'body<<DAILY_EOF'
+            cat daily_email.html
+            echo 'DAILY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Read subject
+        id: subject
+        run: echo "value=$(cat daily_subject.txt)" >> "$GITHUB_OUTPUT"
+
+      # =========================
+      # SEND EMAIL
+      # =========================
+      - name: Send daily digest
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          to: ${{ secrets.TO_EMAIL }}
+          from: nodeu2c <${{ secrets.SMTP_USER }}>
+          subject: ${{ steps.subject.outputs.value }}
+          body: ${{ steps.email.outputs.body }}
+          content_type: text/html
+
+      # =========================
+      # COMMIT DB
+      # =========================
+      - name: Commit
+        run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add current.db
