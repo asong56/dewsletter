@@ -14,6 +14,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          lfs: true        # pull existing LFS objects on checkout
+
+      - name: Init Git LFS
+        run: git lfs install
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -49,6 +54,7 @@ jobs:
 
       # =========================
       # ARCHIVE current → archive.db
+      # archive.db is tracked by Git LFS (.gitattributes)
       # =========================
       - name: Merge into archive
         run: python scripts/archive.py
@@ -65,8 +71,6 @@ jobs:
 
       # =========================
       # SEND EMAIL
-      # attachment 1: weekly.html  — open in any browser, no tools needed
-      # attachment 2: current.db   — raw SQLite for local search
       # =========================
       - name: Send weekly digest
         uses: dawidd6/action-send-mail@v3
@@ -94,10 +98,8 @@ jobs:
           python scripts/db_init.py
 
       # =========================
-      # COMMIT  (archive.db + fresh current.db)
-      # Note: archive.db grows ~proportional to weekly article count.
-      # If it exceeds GitHub's 100 MB file limit, migrate to Git LFS:
-      #   git lfs track "archive.db"
+      # COMMIT
+      # archive.db is pushed as an LFS pointer — actual binary goes to LFS storage
       # =========================
       - name: Commit
         run: |
