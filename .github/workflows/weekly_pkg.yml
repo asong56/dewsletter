@@ -12,7 +12,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -23,41 +23,38 @@ jobs:
       - name: Install dependencies
         run: |
           pip install feedparser requests trafilatura yt-dlp markdown
-          sudo apt-get update
+          sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
 
-      - name: Init DB
+      - name: Init DB (+ migrate schema)
         run: python scripts/db_init.py
 
       # =========================
-      # RETRY (best effort)
+      # RETRY failed sources
       # =========================
       - name: Retry failed sources
         run: |
           python - << 'EOF'
-          import os
-          import sqlite3
-          import subprocess
+          import os, sqlite3, subprocess
 
-          conn = sqlite3.connect("current.db")
-          rows = conn.execute("SELECT DISTINCT source_id FROM errors").fetchall()
-
-          sources = [r[0] for r in rows]
+          conn    = sqlite3.connect("current.db")
+          sources = [r[0] for r in conn.execute("SELECT DISTINCT source_id FROM errors").fetchall()]
+          conn.close()
 
           for s in sources:
               print("retry:", s)
-
-              if "youtube" in s:
-                  cmd = ["python", "scripts/youtube.py"]
-              else:
-                  cmd = ["python", "scripts/rss.py"]
-
-              env = {**os.environ, "RETRY_ONLY_SOURCE": s}
-              subprocess.run(cmd, env=env)
+              script = "scripts/youtube.py" if "youtube" in s else "scripts/rss.py"
+              subprocess.run(["python", script], env={**os.environ, "RETRY_ONLY_SOURCE": s})
           EOF
 
       # =========================
-      # RENDER WEEKLY HTML
+      # ARCHIVE current → archive.db
+      # =========================
+      - name: Merge into archive
+        run: python scripts/archive.py
+
+      # =========================
+      # RENDER weekly HTML
       # =========================
       - name: Render weekly HTML
         run: python scripts/render_weekly.py
@@ -68,6 +65,8 @@ jobs:
 
       # =========================
       # SEND EMAIL
+      # attachment 1: weekly.html  — open in any browser, no tools needed
+      # attachment 2: current.db   — raw SQLite for local search
       # =========================
       - name: Send weekly digest
         uses: dawidd6/action-send-mail@v3
@@ -81,12 +80,13 @@ jobs:
           from: nodeu2c <${{ secrets.SMTP_USER }}>
           subject: ${{ steps.subject.outputs.value }}
           body: |
-            本周文章汇总见附件 weekly.html（用浏览器打开即可阅读，无需任何工具）。
-            数据库原始文件 current.db 也在附件中备用。
+            Attachments:
+              weekly.html  — open in any browser (no VPN, no tools)
+              current.db   — raw SQLite database for local search
           attachments: weekly.html,current.db
 
       # =========================
-      # RESET DB
+      # RESET current.db
       # =========================
       - name: Reset DB
         run: |
@@ -94,12 +94,15 @@ jobs:
           python scripts/db_init.py
 
       # =========================
-      # COMMIT
+      # COMMIT  (archive.db + fresh current.db)
+      # Note: archive.db grows ~proportional to weekly article count.
+      # If it exceeds GitHub's 100 MB file limit, migrate to Git LFS:
+      #   git lfs track "archive.db"
       # =========================
       - name: Commit
         run: |
-          git config user.name github-actions
+          git config user.name  github-actions
           git config user.email github-actions@github.com
-          git add current.db
-          git commit -m "weekly reset" || true
+          git add current.db archive.db
+          git commit -m "weekly reset · $(date +'%Y-%m-%d')" || true
           git push
