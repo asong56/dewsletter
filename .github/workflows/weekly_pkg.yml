@@ -22,7 +22,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install feedparser requests trafilatura yt-dlp google-genai
+          pip install feedparser requests trafilatura yt-dlp markdown
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
@@ -57,25 +57,19 @@ jobs:
           EOF
 
       # =========================
-      # PROXY GENERATION
+      # RENDER WEEKLY HTML
       # =========================
-      # - name: Generate proxy list
-      #   env:
-      #     GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      #   run: |
-      #     python scripts/proxy.py
+      - name: Render weekly HTML
+        run: python scripts/render_weekly.py
 
-      # =========================
-      # PACKAGE
-      # =========================
-      - name: Create package
-        run: |
-          python scripts/weekly_pkg.py
+      - name: Read subject
+        id: subject
+        run: echo "value=$(cat weekly_subject.txt)" >> "$GITHUB_OUTPUT"
 
       # =========================
       # SEND EMAIL
       # =========================
-      - name: Send email
+      - name: Send weekly digest
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -84,10 +78,12 @@ jobs:
           username: ${{ secrets.SMTP_USER }}
           password: ${{ secrets.SMTP_PASS }}
           to: ${{ secrets.TO_EMAIL }}
-          from: GitHub Actions <${{ secrets.SMTP_USER }}>
-          subject: Weekly Package
-          body: Weekly data package attached.
-          attachments: output.zip
+          from: nodeu2c <${{ secrets.SMTP_USER }}>
+          subject: ${{ steps.subject.outputs.value }}
+          body: |
+            本周文章汇总见附件 weekly.html（用浏览器打开即可阅读，无需任何工具）。
+            数据库原始文件 current.db 也在附件中备用。
+          attachments: weekly.html,current.db
 
       # =========================
       # RESET DB
