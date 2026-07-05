@@ -1,7 +1,8 @@
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import os
+import time
 
 import requests
 import feedparser
@@ -12,6 +13,8 @@ from hash import generate_item_id
 
 
 OPML_PATH = Path("feed.opml")
+
+LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "8"))
 
 
 def run_id():
@@ -61,12 +64,29 @@ def content(entry):
     return entry.get("summary", "")
 
 
+def is_recent(entry) -> bool:
+    cutoff = datetime.now(UTC) - timedelta(days=LOOKBACK_DAYS)
+
+    published = entry.get("published_parsed")
+    if published is None:
+        return True
+
+    try:
+        pub_dt = datetime(*published[:6], tzinfo=UTC)
+        return pub_dt >= cutoff
+    except Exception:
+        return True
+
+
 def process(entry, r, feed):
     url = entry.get("link")
     if not url:
         return
 
     if retry_filter() and feed != retry_filter():
+        return
+
+    if not is_recent(entry):
         return
 
     if item_exists(url):
