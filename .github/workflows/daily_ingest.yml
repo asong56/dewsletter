@@ -25,6 +25,8 @@ jobs:
       - run: python scripts/db_init.py
 
       - run: python scripts/rss.py
+        env:
+          LOOKBACK_DAYS: "8"
       - run: python scripts/youtube.py
 
       - run: |
