@@ -28,6 +28,42 @@ jobs:
       - run: python scripts/youtube.py
 
       # =========================
+      # 重试本次失败的 source
+      # 只重试当前 run_id 产生的错误，不跨日
+      # =========================
+      - name: Retry failed sources
+        run: |
+          python - << 'PYEOF'
+          import sqlite3, subprocess, sys
+          from pathlib import Path
+
+          conn = sqlite3.connect("current.db")
+          row = conn.execute(
+              "SELECT run_id FROM items ORDER BY run_id DESC LIMIT 1"
+          ).fetchone()
+          if not row:
+              sys.exit(0)
+
+          run_id = row[0]
+          sources = [r[0] for r in conn.execute(
+              "SELECT DISTINCT source_id FROM errors WHERE run_id = ?",
+              (run_id,)
+          ).fetchall()]
+          conn.close()
+
+          if not sources:
+              print("retry: nothing to retry")
+              sys.exit(0)
+
+          print(f"retry: {len(sources)} failed sources")
+          for src in sources:
+              script = "scripts/youtube.py" if "youtube.com" in src else "scripts/rss.py"
+              import os
+              env = {**os.environ, "RETRY_ONLY_SOURCE": src}
+              subprocess.run(["python", script], env=env)
+          PYEOF
+
+      # =========================
       # RENDER DAILY EMAIL
       # =========================
       - name: Render daily email
@@ -62,6 +98,32 @@ jobs:
           subject: ${{ steps.subject.outputs.value }}
           body: ${{ steps.email.outputs.body }}
           content_type: text/html
+
+      # =========================
+      # NTFY 推送（可选，设置了 NTFY_TOPIC 才发）
+      # 手机装 ntfy app → 订阅同名 topic 即可收到推送
+      # Secret 名称: NTFY_TOPIC（随机字符串，如 nodeu2c-abc123）
+      # =========================
+      - name: Push notification via ntfy
+        if: ${{ secrets.NTFY_TOPIC != '' }}
+        run: |
+          COUNT=$(python -c "
+          import sqlite3
+          conn = sqlite3.connect('current.db')
+          row = conn.execute('SELECT run_id FROM items ORDER BY run_id DESC LIMIT 1').fetchone()
+          if row:
+              n = conn.execute('SELECT COUNT(*) FROM items WHERE run_id=?', (row[0],)).fetchone()[0]
+              print(n)
+          else:
+              print(0)
+          ")
+          SUBJECT=$(cat daily_subject.txt)
+          curl -s \
+            -H "Title: nodeu2c 日报" \
+            -H "Priority: default" \
+            -H "Tags: newspaper" \
+            -d "${SUBJECT} · 共 ${COUNT} 篇" \
+            "https://ntfy.sh/${{ secrets.NTFY_TOPIC }}"
 
       # =========================
       # COMMIT DB
