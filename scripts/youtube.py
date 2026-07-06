@@ -1,13 +1,12 @@
 """
 youtube.py  —  YouTube subtitle ingest
-Changes from original:
-  - Subtitles: English only (en / en-orig)
-  - clean_vtt(): proper deduplication via seen-set, strips inline timing tags
-  - process(): receives category from OPML; passes it to insert_item()
+字幕语言策略：下载视频原有的字幕（不强制英文），
+优先手动字幕 > 自动生成，优先非英文（保留原语言）> 英文。
 """
 
 from datetime import datetime, UTC
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import xml.etree.ElementTree as ET
 import subprocess
 import tempfile
@@ -21,7 +20,8 @@ from db_write import insert_item, insert_error, item_exists
 from hash import generate_item_id
 
 
-OPML_PATH = Path("feed.opml")
+OPML_PATH   = Path("feed.opml")
+MAX_WORKERS = int(os.getenv("YT_WORKERS", "3"))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,18 +60,38 @@ def load_feeds() -> list[tuple[str, str]]:
 
 # ── Subtitle download ─────────────────────────────────────────────────────────
 
+def pick_vtt(tmp_dir: Path) -> Path | None:
+    """
+    从下载目录选出最合适的 .vtt 文件。
+    策略：有非英文字幕则优先选非英文（保留视频原语言）；
+    全是英文时取第一个。
+    """
+    vtt_files = list(tmp_dir.glob("*.vtt"))
+    if not vtt_files:
+        return None
+
+    # 非英文文件（原语言字幕）
+    non_en = [
+        f for f in vtt_files
+        if not re.search(r"\.(en|en-orig|en-US|en-GB)[.-]", f.name)
+        and not f.name.endswith(".en.vtt")
+    ]
+    return non_en[0] if non_en else vtt_files[0]
+
+
 def download_vtt(url: str) -> str | None:
     """
-    Download English subtitles (manual or auto-generated) for a YouTube URL.
-    Returns raw VTT text or None if unavailable.
+    下载字幕：不限制语言，让 yt-dlp 下载视频本身有的字幕。
+    优先手动字幕（--write-sub），fallback 自动生成（--write-auto-sub）。
+    排除 live_chat 避免下载到直播弹幕记录。
     """
     with tempfile.TemporaryDirectory() as tmp:
         cmd = [
             "yt-dlp",
             "--skip-download",
-            "--write-auto-sub",
             "--write-sub",
-            "--sub-langs", "en,en-orig",
+            "--write-auto-sub",
+            "--sub-langs", "all,-live_chat",
             "--sub-format", "vtt",
             "--output", f"{tmp}/%(id)s",
             url,
@@ -81,20 +101,18 @@ def download_vtt(url: str) -> str | None:
         if result.returncode != 0:
             return None
 
-        vtt_files = list(Path(tmp).glob("*.vtt"))
-        if not vtt_files:
+        chosen = pick_vtt(Path(tmp))
+        if not chosen:
             return None
 
-        return vtt_files[0].read_text("utf-8", errors="ignore")
+        return chosen.read_text("utf-8", errors="ignore")
 
 
 def clean_vtt(vtt: str) -> str:
     """
-    Convert WebVTT to clean plain text.
-
-    YouTube auto-captions repeat previous lines in each cue during word-by-word
-    reveals. A seen-set deduplicates these while preserving reading order.
-    Inline timing tags like <00:00:01.500> and <c> / </c> are stripped.
+    WebVTT → 纯文本。
+    YouTube 自动字幕每个 cue 会重复前几行（逐词显示），用 seen-set 去重。
+    去掉内联时间标签 <00:00:01.000>、<c>、</c> 等。
     """
     seen: set[str] = set()
     lines: list[str] = []
@@ -103,7 +121,6 @@ def clean_vtt(vtt: str) -> str:
         for raw_line in block.splitlines():
             raw_line = raw_line.strip()
 
-            # Skip VTT structure lines
             if (not raw_line
                     or "-->"        in raw_line
                     or raw_line.startswith("WEBVTT")
@@ -113,7 +130,6 @@ def clean_vtt(vtt: str) -> str:
                     or re.fullmatch(r"\d+", raw_line)):
                 continue
 
-            # Strip inline timing tags: <00:00:01.000>, <c>, </c>, <i>, </i>, etc.
             text = re.sub(r"<[^>]+>", "", raw_line).strip()
 
             if text and text not in seen:
@@ -157,25 +173,39 @@ def process(entry, r: str, feed_url: str, category: str) -> None:
     )
 
 
+# ── Per-feed processing（线程工作单元）────────────────────────────────────────
+
+def fetch_feed(feed_url: str, category: str, r: str) -> None:
+    try:
+        resp = requests.get(feed_url, timeout=30)
+        resp.raise_for_status()
+        feed = feedparser.parse(resp.content)
+
+        for entry in feed.entries:
+            try:
+                process(entry, r, feed_url, category)
+            except Exception as ex:
+                insert_error(r, entry.get("link", feed_url), "parse", "unknown", str(ex))
+
+    except Exception as ex:
+        insert_error(r, feed_url, "fetch", "network", str(ex))
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
     r = run_id()
+    feeds = load_feeds()
 
-    for feed_url, category in load_feeds():
-        try:
-            resp = requests.get(feed_url, timeout=30)
-            resp.raise_for_status()
-            feed = feedparser.parse(resp.content)
+    print(f"youtube: {len(feeds)} channels, {MAX_WORKERS} workers")
 
-            for entry in feed.entries:
-                try:
-                    process(entry, r, feed_url, category)
-                except Exception as ex:
-                    insert_error(r, entry.get("link", feed_url), "parse", "unknown", str(ex))
-
-        except Exception as ex:
-            insert_error(r, feed_url, "fetch", "network", str(ex))
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
+        futures = {exe.submit(fetch_feed, url, cat, r): url for url, cat in feeds}
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as ex:
+                print(f"[unhandled] {futures[future]}: {ex}")
 
 
 if __name__ == "__main__":

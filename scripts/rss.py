@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import xml.etree.ElementTree as ET
 import os
 
@@ -11,8 +12,9 @@ from db_write import insert_item, insert_error, item_exists
 from hash import generate_item_id
 
 
-OPML_PATH    = Path("feed.opml")
+OPML_PATH     = Path("feed.opml")
 LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "8"))
+MAX_WORKERS   = int(os.getenv("RSS_WORKERS", "8"))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -28,10 +30,6 @@ def retry_filter() -> str | None:
 # ── OPML parsing ─────────────────────────────────────────────────────────────
 
 def load_feeds() -> list[tuple[str, str]]:
-    """
-    Parse feed.opml and return (feed_url, category) pairs.
-    Flat feeds (not inside a folder outline) get category = ''.
-    """
     tree = ET.parse(OPML_PATH)
     feeds: list[tuple[str, str]] = []
 
@@ -43,7 +41,6 @@ def load_feeds() -> list[tuple[str, str]]:
             if url:
                 feeds.append((url, category))
             else:
-                # Folder outline — its text attribute becomes the category name
                 walk(child, child.attrib.get("text", ""))
 
     body = tree.getroot().find("body")
@@ -56,18 +53,12 @@ def load_feeds() -> list[tuple[str, str]]:
 # ── Content extraction ────────────────────────────────────────────────────────
 
 def extract(url: str) -> str | None:
-    """
-    Fetch and extract article text as Markdown.
-    Falls back to archive.org if the primary request yields nothing.
-    """
-    # Primary
     raw = trafilatura.fetch_url(url)
     if raw:
         text = trafilatura.extract(raw, output_format="markdown")
         if text:
             return text
 
-    # Fallback: Wayback Machine (archive.org is reachable from GH Actions)
     try:
         wayback = f"https://web.archive.org/web/{url}"
         raw = trafilatura.fetch_url(wayback, config=_fast_config())
@@ -80,7 +71,6 @@ def extract(url: str) -> str | None:
 
 
 def _fast_config():
-    """Short timeout for archive.org fallback so it never blocks ingest."""
     cfg = trafilatura.settings.use_config()
     cfg.set("DEFAULT", "DOWNLOAD_TIMEOUT", "10")
     return cfg
@@ -89,16 +79,12 @@ def _fast_config():
 # ── Date filtering ────────────────────────────────────────────────────────────
 
 def is_recent(entry) -> bool:
-    """
-    Return False only when the entry has a parseable date older than LOOKBACK_DAYS.
-    Missing or unparseable dates are treated as recent (fail-open).
-    """
     published = entry.get("published_parsed")
     if published is None:
         return True
     try:
-        pub_dt  = datetime(*published[:6], tzinfo=UTC)
-        cutoff  = datetime.now(UTC) - timedelta(days=LOOKBACK_DAYS)
+        pub_dt = datetime(*published[:6], tzinfo=UTC)
+        cutoff = datetime.now(UTC) - timedelta(days=LOOKBACK_DAYS)
         return pub_dt >= cutoff
     except Exception:
         return True
@@ -133,28 +119,44 @@ def process(entry, r: str, feed_url: str, category: str) -> None:
     )
 
 
+# ── Per-feed processing（线程工作单元）────────────────────────────────────────
+
+def fetch_feed(feed_url: str, category: str, r: str) -> None:
+    try:
+        resp = requests.get(feed_url, timeout=30)
+        resp.raise_for_status()
+        feed = feedparser.parse(resp.content)
+
+        for entry in feed.entries:
+            try:
+                process(entry, r, feed_url, category)
+            except Exception as ex:
+                insert_error(r, entry.get("link", feed_url), "parse", "unknown", str(ex))
+
+    except Exception as ex:
+        insert_error(r, feed_url, "fetch", "network", str(ex))
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
     r = run_id()
 
-    for feed_url, category in load_feeds():
-        # Skip YouTube feeds — handled by youtube.py
-        if "youtube.com" in feed_url or "youtu.be" in feed_url:
-            continue
-        try:
-            resp = requests.get(feed_url, timeout=30)
-            resp.raise_for_status()
-            feed = feedparser.parse(resp.content)
+    # 排除 YouTube feed，由 youtube.py 处理
+    feeds = [
+        (url, cat) for url, cat in load_feeds()
+        if "youtube.com" not in url and "youtu.be" not in url
+    ]
 
-            for entry in feed.entries:
-                try:
-                    process(entry, r, feed_url, category)
-                except Exception as ex:
-                    insert_error(r, entry.get("link", feed_url), "parse", "unknown", str(ex))
+    print(f"rss: {len(feeds)} feeds, {MAX_WORKERS} workers")
 
-        except Exception as ex:
-            insert_error(r, feed_url, "fetch", "network", str(ex))
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as exe:
+        futures = {exe.submit(fetch_feed, url, cat, r): url for url, cat in feeds}
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as ex:
+                print(f"[unhandled] {futures[future]}: {ex}")
 
 
 if __name__ == "__main__":

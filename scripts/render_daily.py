@@ -3,27 +3,28 @@ import sqlite3
 import html
 from datetime import datetime, UTC
 from urllib.parse import urlparse
+from collections import defaultdict
 
-ROOT    = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "current.db"
+ROOT        = Path(__file__).resolve().parent.parent
+DB_PATH     = ROOT / "current.db"
 OUT_HTML    = ROOT / "daily_email.html"
 OUT_SUBJECT = ROOT / "daily_subject.txt"
 
-# ── Design-system colors (hex approximations of §2.4 OKLCH values) ──────────
-BG          = "#f9f9fb"   # n-0 light
-SURFACE     = "#f2f2f6"   # n-1 light
-BORDER      = "#dddde9"   # n-2 light
-MUTED       = "#888898"   # n-3
-TEXT        = "#2c2c3a"   # n-4 light
-ACCENT      = "#3b5bdb"   # accent  oklch(52% 0.18 220)
-ACCENT_DIM  = "#eef1ff"   # accent-dim
+# ── Design-system colors ──────────────────────────────────────────────────────
+BG         = "#f9f9fb"
+SURFACE    = "#f2f2f6"
+BORDER     = "#dddde9"
+MUTED      = "#888898"
+TEXT       = "#2c2c3a"
+ACCENT     = "#3b5bdb"
+ACCENT_DIM = "#eef1ff"
 
 FONT = ("'OPPO Sans','PingFang SC','Microsoft YaHei',"
         "'Switzer','Open Sans',ui-sans-serif,system-ui,sans-serif")
 MONO = "ui-monospace,'Monaspace Neon','Cascadia Code',monospace"
 
 
-# ── DB helpers ───────────────────────────────────────────────────────────────
+# ── DB helpers ────────────────────────────────────────────────────────────────
 
 def get_latest_run(conn: sqlite3.Connection):
     row = conn.execute(
@@ -33,15 +34,16 @@ def get_latest_run(conn: sqlite3.Connection):
 
 
 def get_items(conn: sqlite3.Connection, run_id: str):
+    # 同时取 category，按 category / created_at 排序
     return conn.execute(
-        """SELECT title, source_id, content, created_at
+        """SELECT title, source_id, content, created_at, category
            FROM items WHERE run_id = ?
-           ORDER BY created_at DESC""",
+           ORDER BY category, created_at DESC""",
         (run_id,),
     ).fetchall()
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def domain(url: str) -> str:
     try:
@@ -50,7 +52,7 @@ def domain(url: str) -> str:
         return url
 
 
-def preview(text: str, max_chars: int = 340) -> str:
+def preview(text: str, max_chars: int = 900) -> str:
     if not text:
         return ""
     flat = " ".join(text.split())
@@ -61,30 +63,24 @@ def preview(text: str, max_chars: int = 340) -> str:
 
 def fmt_date(run_id: str) -> str:
     try:
-        dt = datetime.strptime(run_id, "%Y%m%dT%H%M%SZ")
+        dt   = datetime.strptime(run_id, "%Y%m%dT%H%M%SZ")
         days = ["一", "二", "三", "四", "五", "六", "日"]
         return dt.strftime(f"%Y年%m月%d日 · 周{days[dt.weekday()]}")
     except Exception:
         return run_id
 
 
-# ── Rendering ────────────────────────────────────────────────────────────────
+# ── Rendering ─────────────────────────────────────────────────────────────────
 
-def render_articles(items) -> str:
-    if not items:
-        return (f'<p style="color:{MUTED};text-align:center;'
-                f'padding:48px 0;font-size:15px;">今日暂无新文章</p>')
+def render_article(title, source_id, content, created_at, first_in_section: bool) -> str:
+    sep = (f"border-top:1px solid {BORDER};"
+           f"padding-top:24px;margin-top:24px;") if not first_in_section else ""
+    t   = html.escape(title or "(无标题)")
+    src = html.escape(domain(source_id))
+    pre = html.escape(preview(content))
+    url = html.escape(source_id)
 
-    parts = []
-    for i, (title, source_id, content, created_at) in enumerate(items):
-        sep = (f"border-top:1px solid {BORDER};"
-               f"padding-top:24px;margin-top:24px;") if i else ""
-        t   = html.escape(title or "(无标题)")
-        src = html.escape(domain(source_id))
-        pre = html.escape(preview(content))
-        url = html.escape(source_id)
-
-        parts.append(f"""
+    return f"""
 <article style="display:block;{sep}">
   <p style="margin:0 0 5px;font-size:11px;font-weight:600;
             letter-spacing:.08em;text-transform:uppercase;
@@ -97,7 +93,37 @@ def render_articles(items) -> str:
             color:{TEXT};letter-spacing:.015em">{pre}</p>
   <a href="{url}" style="font-size:13px;color:{ACCENT};
      text-decoration:none;letter-spacing:.01em">阅读全文 ↗</a>
-</article>""")
+</article>"""
+
+
+def render_articles(items) -> str:
+    if not items:
+        return (f'<p style="color:{MUTED};text-align:center;'
+                f'padding:48px 0;font-size:15px;">今日暂无新文章</p>')
+
+    # 按 category 分组
+    groups: dict[str, list] = defaultdict(list)
+    for row in items:
+        cat = row[4] or "其他"
+        groups[cat].append(row)
+
+    parts = []
+
+    for cat_i, (cat, cat_items) in enumerate(sorted(groups.items())):
+        # 分类标题（首个分类不加顶部间距）
+        cat_top = "margin-top:48px;" if cat_i > 0 else ""
+        parts.append(
+            f'<div style="{cat_top}margin-bottom:28px;">'
+            f'<p style="margin:0 0 16px;font-size:11px;font-weight:600;'
+            f'letter-spacing:.10em;text-transform:uppercase;color:{MUTED};'
+            f'border-bottom:1px solid {BORDER};padding-bottom:10px;">'
+            f'{html.escape(cat)}</p>'
+        )
+
+        for j, (title, source_id, content, created_at, _) in enumerate(cat_items):
+            parts.append(render_article(title, source_id, content, created_at, first_in_section=(j == 0)))
+
+        parts.append('</div>')
 
     return "\n".join(parts)
 
@@ -150,7 +176,7 @@ def render_email(items, run_id: str) -> str:
 </html>"""
 
 
-# ── Entry point ──────────────────────────────────────────────────────────────
+# ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
     conn = sqlite3.connect(DB_PATH)

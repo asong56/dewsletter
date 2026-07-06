@@ -6,16 +6,16 @@ DB_PATH = ROOT / "current.db"
 
 
 def get_connection() -> sqlite3.Connection:
-    return sqlite3.connect(DB_PATH)
+    # timeout=30: 并发写入时等待锁释放，而非直接报 OperationalError
+    # WAL 模式：允许多读者并行，写者也不互相完全阻塞
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
 
 
 # ── Migration ────────────────────────────────────────────────────────────────
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """
-    Idempotent: adds columns introduced after the initial schema deploy.
-    Called by db_init.py on every run so existing databases stay current.
-    """
     existing = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
     if "category" not in existing:
         conn.execute("ALTER TABLE items ADD COLUMN category TEXT NOT NULL DEFAULT ''")
@@ -50,7 +50,7 @@ def insert_item(
     conn = get_connection()
     try:
         conn.execute(
-            """INSERT INTO items
+            """INSERT OR IGNORE INTO items
                (id, source_id, title, content, created_at, run_id, category)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (item_id, source_id, title, content, created_at, run_id, category),
