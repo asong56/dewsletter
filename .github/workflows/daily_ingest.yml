@@ -68,10 +68,11 @@ jobs:
       - name: Read email body
         id: email
         run: |
+          DELIM=$(openssl rand -hex 16)
           {
-            echo 'body<<DAILY_EOF'
+            echo "body<<${DELIM}"
             cat daily_email.html
-            echo 'DAILY_EOF'
+            echo "${DELIM}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Read subject
