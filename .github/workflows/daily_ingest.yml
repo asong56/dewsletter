@@ -72,6 +72,7 @@ jobs:
           {
             echo "body<<${DELIM}"
             cat daily_email.html
+            echo
             echo "${DELIM}"
           } >> "$GITHUB_OUTPUT"
 
