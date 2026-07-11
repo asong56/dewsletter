@@ -18,10 +18,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install feedparser requests trafilatura yt-dlp
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
 
-      - run: sudo apt-get install -y ffmpeg
+      - name: Install Python dependencies
+        run: pip install feedparser requests trafilatura yt-dlp
 
       - run: python scripts/db_init.py
       - run: python scripts/rss.py
@@ -30,7 +33,7 @@ jobs:
       - name: Retry failed sources
         run: |
           python - << 'PYEOF'
-          import sqlite3, subprocess, sys
+          import sqlite3, subprocess, sys, os
           from pathlib import Path
 
           conn = sqlite3.connect("current.db")
@@ -54,7 +57,6 @@ jobs:
           print(f"retry: {len(sources)} failed sources")
           for src in sources:
               script = "scripts/youtube.py" if "youtube.com" in src else "scripts/rss.py"
-              import os
               env = {**os.environ, "RETRY_ONLY_SOURCE": src}
               subprocess.run(["python", script], env=env)
           PYEOF

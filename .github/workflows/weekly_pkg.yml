@@ -27,12 +27,22 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install feedparser requests trafilatura yt-dlp markdown
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
+          pip install feedparser requests trafilatura yt-dlp markdown
 
       - name: Init DB (+ migrate schema)
         run: python scripts/db_init.py
+
+      # =========================
+      # INGEST (RSS + YouTube)
+      # weekly run re-ingests the latest week so the package is self-contained
+      # =========================
+      - name: Ingest RSS feeds
+        run: python scripts/rss.py
+
+      - name: Ingest YouTube feeds
+        run: python scripts/youtube.py
 
       # =========================
       # RETRY failed sources
@@ -43,7 +53,16 @@ jobs:
           import os, sqlite3, subprocess
 
           conn    = sqlite3.connect("current.db")
-          sources = [r[0] for r in conn.execute("SELECT DISTINCT source_id FROM errors").fetchall()]
+          row = conn.execute(
+              "SELECT run_id FROM items ORDER BY run_id DESC LIMIT 1"
+          ).fetchone()
+          if not row:
+              exit(0)
+
+          run_id = row[0]
+          sources = [r[0] for r in conn.execute(
+              "SELECT DISTINCT source_id FROM errors WHERE run_id = ?", (run_id,)
+          ).fetchall()]
           conn.close()
 
           for s in sources:
