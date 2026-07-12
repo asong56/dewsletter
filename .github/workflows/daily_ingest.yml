@@ -67,17 +67,6 @@ jobs:
       - name: Render daily email
         run: python scripts/render_daily.py
 
-      - name: Read email body
-        id: email
-        run: |
-          DELIM=$(openssl rand -hex 16)
-          {
-            echo "body<<${DELIM}"
-            cat daily_email.html
-            echo
-            echo "${DELIM}"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Read subject
         id: subject
         run: echo "value=$(cat daily_subject.txt)" >> "$GITHUB_OUTPUT"
@@ -96,8 +85,7 @@ jobs:
           to: ${{ secrets.TO_EMAIL }}
           from: nodeu2c <${{ secrets.SMTP_USER }}>
           subject: ${{ steps.subject.outputs.value }}
-          body: ${{ steps.email.outputs.body }}
-          content_type: text/html
+          html_body: file://daily_email.html
 
       # =========================
       # COMMIT DB
