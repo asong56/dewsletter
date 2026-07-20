@@ -202,7 +202,7 @@ feeds:
         url: https://innei.in/feed
         display_mode: full
       - name: Bubbles Town
-        url: FILL_ME
+        url: https://bubbles.town/weekly/feed
         display_mode: full
       - name: Today I Found Out
         url: https://www.todayifoundout.com/index.php/feed/
