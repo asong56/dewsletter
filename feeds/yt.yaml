@@ -1,0 +1,153 @@
+# feeds/yt.yaml
+# YouTube channels
+# channel_id: fill from youtube.com/channel/<id> or youtube.com/@handle page
+# All entries go to youtube.db, issue: yt_weekly
+
+feeds:
+
+  - key: yt.daily.tech
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 零度解说
+        channel_id: UCvijahEyGtvMpmMHBu4FS2w
+      - name: 极客湾
+        channel_id: UCeUJO1H3TEXu2syfAAPjYKQ
+      - name: IT咖啡馆
+        channel_id: UCXLV-KfDQAFUJ_as9H1Lfbw
+      - name: 新知
+        channel_id: UChoR3_5ZTj3TS12ub1GHw3Q
+      - name: 程序媛小白
+        channel_id: UCc0K-eBV3blWsg2PWlrbdBg
+      - name: 我是阿众
+        channel_id: UC4GFL56UB1AmyCEvzqpvSAw
+      - name: 爱分享
+        channel_id: UCgV1t5fHFvAVPyprEWvuIzg
+      - name: 不良林
+        channel_id: UCbCCUH8S3yhlm7__rhxR2QQ
+      - name: 司波图
+        channel_id: UCUWUYyNh8KFS7E6-Q0ajBzQ
+      - name: 影享者
+        channel_id: UCR7Up1tdiE7lu9xjA-OMltA
+      - name: 科技猎奇
+        channel_id: UCiZ-vPsF_30ZyEBRfOYnsdg
+      - name: 科技共享
+        channel_id: UCQoagx4VHBw3HkAyzvKEEBA
+      - name: 数码解码
+        channel_id: UCffPrldpcuZNeYbzeZ8udxg
+      - name: AI 探索与发现
+        channel_id: UC0k8npj7VdHzN2L_-JSaPyA
+      - name: ami.moment
+        channel_id: UCGs_cktFPCgN8ggJJVon84g
+
+  - key: yt.daily.ios
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 李大可爱玩
+        channel_id: UCCeBr_ypzzFobTC7keWUbDg
+      - name: 塔科女子
+        channel_id: UCOiu59jL8MFIqq-HkIKCKFg
+
+  - key: yt.digest.finance
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 美投讲美股
+        channel_id: UCBUH38E0ngqvmTqdchWunwQ
+      - name: 硅谷101
+        channel_id: UCKV2yWPB3wn0RTZh3cTD8YA
+
+  - key: yt.digest.history
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 掌柜说历史
+        channel_id: UCmaQHKSlg9QxMgzifrGFbCg
+
+  - key: yt.digest.sport
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 7mlc
+        channel_id: UC9xRcqG8V6yNi6Hum92EoGg
+      - name: Takuya
+        channel_id: FILL_ME
+
+  - key: yt.dive.science
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 漫士沉思录
+        channel_id: UC9D-nVmcQdCgAGUPBJZcmOA
+      - name: 毕导 THU
+        channel_id: UCKJvfb-6icHloy6MBpHg9aw
+      - name: 芳斯塔芙
+        channel_id: UClLEMac0ZjZCsVOTiaBtJBg
+      - name: 何同学
+        channel_id: UCP5Kd0smdWe9H_bDH-73c6Q
+
+  - key: yt.dive.politics
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: VEXILLA 潮時務所
+        channel_id: UCpC2D7JdcB8nlfzhX08i7fg
+      - name: 马司库
+        channel_id: UC3411UsjUC2t-Xfr1gwIhzg
+
+  - key: yt.zen
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 十三要和拳头
+        channel_id: UCduz2zplHaYCAtiaEIcxErw
+      - name: 张八筒
+        channel_id: UCaAXpJRNswRKICOGGdGRpWA
+      - name: Mira 004
+        channel_id: UCM3O_udrQjPU72oRNVipYBQ
+      - name: Jason-老湿
+        channel_id: UC5BC7UNoExVELezGVlV_bYg
+      - name: Ellen 李
+        channel_id: UCsBYq6iSNLIpwr5X2sPmuHQ
+      - name: Funny Lulu 2.0
+        channel_id: UC2pXkPVfSKPFViEIvsGNuMA
+      - name: 泰哥是只小暖猫
+        channel_id: UC820rtkN9apWeN5t9GKz8lw
+      - name: 黄阿玛的后宫生活
+        channel_id: UCw2W7GIqJNB-UMUxncnMuiw
+      - name: 一只笨鼠
+        channel_id: UCUnvudhyaywzo8gygpURLLg
+      - name: SportsHD
+        channel_id: UCU6JLYuerEUb7VrDd4zLihg
+      - name: 人性黑書
+        channel_id: UC-8qeOjUEf4F9tJO5QGviDg
+
+  - key: yt.zen.girl
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 凱哥帶你撩妹
+        channel_id: FILL_ME
+      - name: 凯南教聊天
+        channel_id: UCJ5B2TYnDep7ToycB87AoOA
+      - name: 凯哥教撩妹
+        channel_id: FILL_ME
+      - name: 凯哥带你脱单
+        channel_id: UCjD4XGxZRvCusBrYUUQLeEw
+
+  - key: yt.zen.music
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: 悦耳音乐酱
+        channel_id: UCqWNOHjgfL8ADEdXGznzwUw
+      - name: 妙音人
+        channel_id: UCIgUbcReolYR_R4-p54iomg
+
+  - key: yt.zen.asmr
+    db: youtube
+    issue: yt_weekly
+    sources:
+      - name: FISH13
+        channel_id: UCQnmZZUKvpY3IVSGf44MVVg
