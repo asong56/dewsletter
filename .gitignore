@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Rendered outputs (generated at runtime, not committed)
+out_*.html
+out_*.txt
+out_*.json
+out_report_pdfs/
