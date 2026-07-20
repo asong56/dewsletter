@@ -2,7 +2,7 @@ name: YouTube Weekly
 
 on:
   schedule:
-    - cron: "0 0 * * 3"   # 08:00 BJT Wednesday
+    - cron: "0 0 * * 3"
   workflow_dispatch:
 
 jobs:
@@ -47,7 +47,7 @@ jobs:
         id: subject
         run: echo "value=$(cat out_yt_subject.txt)" >> "$GITHUB_OUTPUT"
 
-      - name: Send email (youtube.db attached)
+      - name: Send email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -62,9 +62,10 @@ jobs:
           attachments: database/youtube.db
 
       - name: Commit database (LFS)
+        continue-on-error: true
         run: |
           git config user.name  github-actions
           git config user.email github-actions@github.com
           git add database/youtube.db
           git commit -m "yt weekly · $(date -u +'%Y-%m-%d')" || true
-          git push
+          git push || true

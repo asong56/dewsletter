@@ -2,7 +2,7 @@ name: Zen Weekly
 
 on:
   schedule:
-    - cron: "0 12 * * 0"   # 20:00 BJT Sunday
+    - cron: "0 12 * * 0"
   workflow_dispatch:
 
 jobs:
@@ -51,11 +51,13 @@ jobs:
           from: Dewsletter <${{ secrets.SMTP_USER }}>
           subject: ${{ steps.subject.outputs.value }}
           html_body: file://out_zen.html
+          attachments: database/zen.db
 
       - name: Commit database (LFS)
+        continue-on-error: true
         run: |
           git config user.name  github-actions
           git config user.email github-actions@github.com
           git add database/zen.db
           git commit -m "zen weekly · $(date -u +'%Y-%m-%d')" || true
-          git push
+          git push || true

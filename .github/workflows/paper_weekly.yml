@@ -2,7 +2,7 @@ name: Paper Weekly
 
 on:
   schedule:
-    - cron: "0 0 * * 5"   # 08:00 BJT Friday
+    - cron: "0 0 * * 5"
   workflow_dispatch:
 
 jobs:
@@ -51,11 +51,13 @@ jobs:
           from: Dewsletter <${{ secrets.SMTP_USER }}>
           subject: ${{ steps.subject.outputs.value }}
           html_body: file://out_paper.html
+          attachments: database/paper.db
 
       - name: Commit database (LFS)
+        continue-on-error: true
         run: |
           git config user.name  github-actions
           git config user.email github-actions@github.com
           git add database/paper.db
           git commit -m "paper weekly · $(date -u +'%Y-%m-%d')" || true
-          git push
+          git push || true
